@@ -1,6 +1,25 @@
-# dc-motor-driver-adapter
+# lixx-bat-indicator
 
-Тут буде і плата і програма.
+Плата для вимірювання напруги батареї LiFePo або Li-ion.
+Складається з процесора CH32V003J4M6 та OLED-дісплейного модуля 128х64 або 128x32 (на справді ще не визначився).
+
+Тут буде і плата (в подальшому) і програма.
+
+
+    PIN MAP
+    -------
+
+    pin2 - VSS
+    pin4 - VDD
+
+    pin8 - DIO (programming)
+
+    pin1 - PA1 - Тимчасово світлодіод LED
+
+    OLED-display
+    pin5 - PC1 - I2C SDA
+    pin6 - PC2 - I2C SCL
+
 
 ## Встановлення інструментів
 

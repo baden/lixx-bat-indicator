@@ -40,6 +40,9 @@
 // };
 
 
+// По цьому вдалось адаптувати 128x32
+// https://github.com/adafruit/Adafruit_SSD1306/blob/master/Adafruit_SSD1306.cpp
+
 #define SSD1306_EXTERNALVCC 0x01  ///< External display voltage source
 #define SSD1306_SWITCHCAPVCC 0x02 ///< Gen. display voltage from 3.3V
 

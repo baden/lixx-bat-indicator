@@ -1,7 +1,9 @@
 #include <stdbool.h>
 #include "gpio.h"
-#include "debug_serial.h"
+// #include "debug_serial.h"
 #include "i2c_tx.h"
+
+// TODO: Може зробимо так? : https://github.com/wagiminator/Development-Boards/tree/main/CH32V003A4M6_DevBoard/software/oled_dma
 #include "oled_min.h"
 // #include "oled_term.h"
 #include "system.h"
@@ -25,10 +27,56 @@
 
 #define PIN_LED    PA1   // pin connected to LED (Temporary)
 
+#if 1
+#define RCC_APB2Periph_GPIOD             ((uint32_t)0x00000020)
+#define RCC_APB2Periph_ADC1              ((uint32_t)0x00000200)
+/*
+ * initialize adc for polling
+ */
+void adc_init( void )
+{
+	// ADCCLK = 24 MHz => RCC_ADCPRE = 0: divide by 2
+	RCC->CFGR0 &= ~(0x1F<<11);
+	
+	// Enable GPIOD and ADC
+	RCC->APB2PCENR |= RCC_APB2Periph_GPIOD | RCC_APB2Periph_ADC1;
+	
+	// PD4 is analog input chl 7
+	GPIOD->CFGLR &= ~(0xf<<(4*4));	// CNF = 00: Analog, MODE = 00: Input
+	
+	// Reset the ADC to init all regs
+	RCC->APB2PRSTR |= RCC_APB2Periph_ADC1;
+	RCC->APB2PRSTR &= ~RCC_APB2Periph_ADC1;
+	
+	// Set up single conversion on chl 7
+	ADC1->RSQR1 = 0;
+	ADC1->RSQR2 = 0;
+	ADC1->RSQR3 = 7;	// 0-9 for 8 ext inputs and two internals
+	
+	// set sampling time for chl 7
+	ADC1->SAMPTR2 &= ~(ADC_SMP0<<(3*7));
+	ADC1->SAMPTR2 |= 7<<(3*7);	// 0:7 => 3/9/15/30/43/57/73/241 cycles
+		
+	// turn on ADC and set rule group to sw trig
+	ADC1->CTLR2 |= ADC_ADON | ADC_EXTSEL;
+	
+	// Reset calibration
+	ADC1->CTLR2 |= ADC_RSTCAL;
+	while(ADC1->CTLR2 & ADC_RSTCAL);
+	
+	// Calibrate
+	ADC1->CTLR2 |= ADC_CAL;
+	while(ADC1->CTLR2 & ADC_CAL);
+	
+	// should be ready for SW conversion now
+}
+#endif
+
 static inline void init(void)
 {
     PIN_output(PIN_LED);
-    PIN_high(PIN_LED);
+    // PIN_high(PIN_LED);
+    PIN_low(PIN_LED);
 
     // SYS_init();
     // UART_init();
@@ -39,6 +87,8 @@ static inline void init(void)
     // DEBUG_init();
 
     OLED_init();
+    ADC_init();                       // init ADC
+    // adc_init();
 }
 
 #if 0
@@ -71,6 +121,7 @@ void EXTI7_0_IRQHandler( void )
 #define JOY_OLED_send(b)          I2C_write(b)
 #define JOY_OLED_send_command(c)  OLED_send_command(c)
 #define JOY_OLED_data_start(y)    {OLED_setpos(0,y);OLED_data_start();}
+#define JOY_OLED_data_startX(x,y)    {OLED_setpos(x,y);OLED_data_start();}
 
 // Steeled from here: https://github.com/lynniemagoo/oled-font-pack/blob/master/fonts/16x16/arial-bold-font-16x16.js
 
@@ -125,26 +176,86 @@ const uint8_t heartImage[8] =
     0B00001110
 };
 
+const uint32_t digits[] = {
+    // 0x00000000,0x00000000,0x00000000,0x00000000,0x0001ff00,0x000fffe0,0x003fe7f8,0x003f003c,0x0073c01e,0x00e1e00e,0x00c07006,0x00c03c07,0x00c01e06,0x00e0070e,0x0070039c,0x003c01f8,0x001ffff0,0x0007ffc0,0x00007c00,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,  // 0
+    // 0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000008,0x00000018,0x00000018,0x0000000c,0x0000000c,0x0000000e,0x00fffffe,0x00fffffe,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,  // 1
+    // 0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00e00010,0x00f80038,0x00fc001c,0x00de000e,0x00c70006,0x00c38006,0x00c1c007,0x00c0e006,0x00c0700e,0x00c03c0e,0x00c01f7c,0x00c00ff8,0x00c003f0,0x00200000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,  // 2
+    // 0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00200008,0x0078001c,0x00e0000c,0x00e00006,0x00c01806,0x00c01806,0x00c01c06,0x00c01c06,0x00e03e0e,0x0070771c,0x007ff3fc,0x003fe1f0,0x000f8000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,  // 3
+    // 0x00000000,0x00000000,0x00000000,0x00000000,0x00038000,0x0003e000,0x0003f000,0x0003bc00,0x00038e00,0x00038780,0x000381e0,0x00038070,0x0003803c,0x00fffffe,0x00fffffe,0x00fffffe,0x00038000,0x00038000,0x00038000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,  // 4
+    // 0x00000000,0x00000000,0x00000000,0x00000000,0x00100000,0x00301f00,0x00781ffe,0x00e01ffe,0x00e00e06,0x00c00606,0x00c00606,0x00c00606,0x00c00606,0x00e00e06,0x00e00e06,0x00783c06,0x003ff806,0x001ff006,0x00038000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,  // 5
+    // 0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x0007ffc0,0x001ffff0,0x003c38f8,0x00701c1c,0x00e00c0e,0x00c00606,0x00c00606,0x00c00607,0x00c00e06,0x00e00e06,0x00783c0e,0x003ff81c,0x001fe004,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,  // 6
+    // 0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000006,0x00000006,0x00800006,0x00f00006,0x00fe0006,0x007fc006,0x000ff006,0x0001fe06,0x00003f86,0x000007f6,0x000001fe,0x0000003e,0x0000000e,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,  // 7
+    // 0x00000000,0x00000000,0x00000000,0x00000000,0x00060000,0x003fc060,0x007fe1f8,0x0070f3fc,0x00e0370e,0x00c03e06,0x00c01c06,0x00c01c07,0x00c01c07,0x00c03e06,0x00e0770e,0x0070f3fc,0x007fe1f8,0x001f80e0,0x00020000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,  // 8
+    // 0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00400ff0,0x00703ff8,0x00e03c3c,0x00c0700e,0x00c06006,0x00c0e006,0x00c06007,0x00e06006,0x0060600e,0x0078301e,0x003f187c,0x001ffff8,0x0007ffe0,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,  // 9
+
+    // Вкрав фонт звідси: https://github.com/lynniemagoo/oled-font-pack/blob/master/fonts/24x32/ubuntu-bold-font-24x32.js
+    0x00000000,0x00000000,0x00000000,0x0007fe00,0x003fffc0,0x007fffe0,0x00fffff0,0x01f801f8,0x03e0007c,0x03c0703c,0x03c0f83c,0x03c0f83c,0x03c0703c,0x03e0007c,0x01f801f8,0x01fffff8,0x00fffff0,0x007fffe0,0x001fff80,0x0001f800,0x00000000,0x00000000,0x00000000,0x00000000,  // 0
+    0x00000000,0x00000000,0x00000000,0x00000000,0x00000080,0x03c007c0,0x03c007c0,0x03c003e0,0x03c003e0,0x03c001f0,0x03fffff8,0x03fffffc,0x03fffffc,0x03fffffc,0x03fffffc,0x03c00000,0x03c00000,0x03c00000,0x03c00000,0x03c00000,0x00000000,0x00000000,0x00000000,0x00000000,  // 1
+    0x00000000,0x00000000,0x00000000,0x00000020,0x03e00070,0x03f800f8,0x03fc0078,0x03fe0078,0x03ff003c,0x03df803c,0x03c7c03c,0x03c3e03c,0x03c3f03c,0x03c1f87c,0x03c0fff8,0x03c07ff8,0x03c03ff0,0x03c01fe0,0x03c007c0,0x03c00000,0x00000000,0x00000000,0x00000000,0x00000000,  // 2
+    0x00000000,0x00000000,0x00000000,0x00000000,0x01c00010,0x01e00078,0x01e00078,0x03c0787c,0x03c0783c,0x03c0783c,0x03c0783c,0x03c0783c,0x03e0fc7c,0x03f1fffc,0x01fffff8,0x01ffeff8,0x00ffeff0,0x007fc3c0,0x001f0000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,  // 3
+    0x00000000,0x00000000,0x00000000,0x000f8000,0x000fc000,0x000ff000,0x000ff800,0x000ffe00,0x000f3f00,0x000f1f80,0x000f07e0,0x000f03f0,0x000f00f8,0x03fffffc,0x03fffffc,0x03fffffc,0x03fffffc,0x03fffffc,0x000f0000,0x000f0000,0x000f0000,0x00000000,0x00000000,0x00000000,  // 4
+    0x00000000,0x00000000,0x00000000,0x01800000,0x01e00000,0x03e03e00,0x03c03ffc,0x03c03ffc,0x03c03ffc,0x03c03ffc,0x03c07c3c,0x03c07c3c,0x03e07c3c,0x01f0f83c,0x01fff83c,0x01fff03c,0x00fff03c,0x007fe03c,0x001f8000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,  // 5
+    0x00000000,0x00000000,0x00000000,0x00000000,0x000ff000,0x007ffe00,0x00ffff80,0x01ffffc0,0x01ffffe0,0x03f07bf0,0x03c079f0,0x03c078f8,0x03c07878,0x03e0f87c,0x03fff83c,0x01fff83c,0x00fff03c,0x007fe03c,0x001f8000,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,  // 6
+    0x00000000,0x00000000,0x00000000,0x00000000,0x0000003c,0x0000003c,0x0000003c,0x03c0003c,0x03fc003c,0x03ff803c,0x03ffe03c,0x03fff83c,0x003ffe3c,0x0003ffbc,0x00007ffc,0x00000ffc,0x000003fc,0x000000fc,0x0000007c,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,  // 7
+    0x00000000,0x00000000,0x00000000,0x003e0000,0x00ff8fe0,0x00ffdff0,0x01ffdff8,0x01e1fff8,0x03e0fc7c,0x03c0783c,0x03c0783c,0x03c0f03c,0x03c0f03c,0x03c0f83c,0x03e1fc7c,0x01e3fff8,0x01ffdff8,0x00ff8ff0,0x007f03c0,0x003e0000,0x00000000,0x00000000,0x00000000,0x00000000,  // 8
+    0x00000000,0x00000000,0x00000000,0x00000000,0x00001f80,0x03c07fe0,0x03c0fff0,0x03c0fff8,0x03c1fff8,0x03e1f07c,0x01e1e03c,0x01e1e03c,0x00f1e03c,0x00f9e07c,0x007de0f8,0x003ffff8,0x001ffff0,0x000fffe0,0x0003ff80,0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,  // 9
+};
+
+uint8_t voltage[4] = {0,0,0,0};
+
+
 void testMem()
 {
-    for(int y = 0; y < OLED_HEIGHT/8; y++) {
-        JOY_OLED_data_start(y);
-        // JOY_OLED_send(0xAA);
-        // JOY_OLED_send(0x01);
-        // JOY_OLED_send(0x55);
-        // JOY_OLED_send(0x01);
-        // JOY_OLED_send(0xFF);
-        // JOY_OLED_send(0x01);
-        // JOY_OLED_send(0xFF);
-        // JOY_OLED_send(0xFF);
-        for(int x = 0; x < 128; x++) {
-            JOY_OLED_send(heartImage[x%8]);
+    static uint32_t _dbg_counter = 1;
+
+    // const uint8_t buf[16] = "1234";
+    for(int y = 0; y < 4; y++) {
+        JOY_OLED_data_startX(14, y);
+        for(int c = 0; c < 4; c++) {
+            uint8_t digit = voltage[c];
+            for(int x = 0; x < 24; x++) {
+                if(y==3) {
+                    JOY_OLED_send((digits[digit*24 + x] >> 24) & 0xFF);
+                } else if(y==2) {
+                    JOY_OLED_send((digits[digit*24 + x] >> 16) & 0xFF);
+                } else if(y==1) {
+                    JOY_OLED_send((digits[digit*24 + x] >> 8) & 0xFF);
+                } else {
+                    JOY_OLED_send(digits[digit*24 + x] & 0xFF);
+                }
+                // JOY_OLED_send(digits[digit*16 + x] & 0xFF);
+            }
+            if(c==0) {
+                JOY_OLED_send(0x00);
+                if(y==3) {
+                    JOY_OLED_send(0x03);  JOY_OLED_send(0x03); JOY_OLED_send(0x03);
+                } else if(y==2) {
+                    JOY_OLED_send(0x80);  JOY_OLED_send(0x80); JOY_OLED_send(0x80);
+                } else {
+                    JOY_OLED_send(0x0); JOY_OLED_send(0x0); JOY_OLED_send(0x00);
+                }
+                JOY_OLED_send(0x00);
+            }
         }
-        // for(int x = 0; x < 1*64; x++) {
-        //     JOY_OLED_send(x);
-        // }
+        JOY_OLED_send(0x00);
+        if(y==0) {
+            JOY_OLED_send(_dbg_counter & 0xFF);
+        } else if(y==1) {
+            JOY_OLED_send((_dbg_counter >> 8) & 0xFF);
+        } else if(y==2) {
+            JOY_OLED_send((_dbg_counter >> 16) & 0xFF);
+        } else {
+            JOY_OLED_send((_dbg_counter >> 24) & 0xFF);
+        }   
+        JOY_OLED_send(0x00);
         JOY_OLED_end();
     }
+
+        _dbg_counter <<= 1;
+        if(_dbg_counter == 0) {
+            _dbg_counter = 1;
+        }
+
 }
 
 void showVoltage()
@@ -198,6 +309,22 @@ void showVoltage()
 
 }
 
+
+static inline uint16_t _ADC_read_VDD(void) {
+  ADC_input_VREF();                             // set VREF as ADC input
+//   return((uint32_t)1200 * 1023 / ADC_read());   // return VDD im mV
+    uint32_t x = 1200 * 1023;
+    uint32_t adc = ADC_read();
+
+    // Iterate division v = x / adc
+    uint16_t v = 0;
+    while(x >= adc) {
+        x -= adc;
+        v++;
+    }
+    return v;
+}
+
 int main(void)
 {
     init();
@@ -212,7 +339,7 @@ int main(void)
     OLED_fill(0x01);
 
     // showVoltage();
-    testMem();
+    // testMem();
 
     // uint8_t y,x; 
     // for(y = 0; y < 8; y++) {
@@ -239,17 +366,87 @@ int main(void)
 
     // uint8_t pattern = 0x01;
 
+#define INTEGRATOR_SIZE 50000
+
+    uint64_t integrator = 0;
+    uint32_t counter = 0;
+
     while(1)
     {
         // #if defined(STARTKIT)
         //     PIN_toggle(PIN_LED);
         // #endif
         // DLY_ms(500);
+        ADC_input_VREF();
+        uint32_t mV = ADC_read();
+        // unsigned mV = _ADC_read_VDD();
+        integrator += mV;
+        counter++;
+        // DLY_us(100);
 
-        if(((int32_t)(STK->CNT - next_tick)) > 0) {
-            next_tick = STK->CNT + RX_TIMEOUT;
+        if(counter >= INTEGRATOR_SIZE) {
+            // mV = integrator;
 
-            PIN_toggle(PIN_LED);
+            #if 1
+            // Iterate division v = x / adc
+            uint64_t x = (uint64_t)1200 * 1023  * INTEGRATOR_SIZE;
+
+            uint16_t v = 0;
+            while(x >= integrator) {
+                x -= integrator;
+                v++;
+            }
+            mV = v;
+            #endif
+
+            integrator = 0;
+            counter = 0;
+
+        // if(((int32_t)(STK->CNT - next_tick)) > 0) {
+        //     next_tick = STK->CNT + RX_TIMEOUT;
+
+            // PIN_toggle(PIN_LED);
+
+            // mV
+            // unsigned mV = _ADC_read_VDD();
+
+            // ADC_input_VREF();
+            // uint32_t mV = ADC_read();
+            // integrator += mV;
+            // counter++;
+            // mV = 1234;
+
+            if(mV > 9999) {
+                voltage[0] = 8;
+                voltage[1] = 8;
+                voltage[2] = 8;
+                voltage[3] = 8;
+
+            } else {
+
+                unsigned volts = 0;
+                while(mV >= 1000) {
+                    mV -= 1000;
+                    volts++;
+                }
+                voltage[0] = volts;
+
+                unsigned mV100 = 0;
+                while(mV >= 100) {
+                    mV -= 100;
+                    mV100++;
+                }
+                voltage[1] = mV100;
+
+                unsigned mV10 = 0;
+                while(mV >= 10) {
+                    mV -= 10;
+                    mV10++;
+                }
+                voltage[2] = mV10;
+                voltage[3] = mV;
+            }
+            testMem();
 
             // OLED_fill(pattern++);
         }
