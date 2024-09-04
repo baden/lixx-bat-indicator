@@ -38,7 +38,7 @@ CFLAGS   = $(CPUARCH) -DF_CPU=$(F_CPU) -I$(NEWLIB) -I$(INCLUDE) -I. -L$(INCLUDE)
 CFLAGS  += -g -Os -flto -ffunction-sections -fno-builtin -Wall
 LDFLAGS  = -T$(LDSCRIPT) -nostdlib -lgcc -static-libgcc -Wl,--gc-sections
 # CFILES   = $(MAINFILE) $(wildcard $(INCLUDE)/*.c) $(wildcard $(INCLUDE)/*.S)
-CFILES   = $(MAINFILE) $(INCLUDE)/debug_serial.c $(INCLUDE)/i2c_tx.c $(INCLUDE)/oled_min.c $(INCLUDE)/system.c  $(wildcard $(INCLUDE)/*.S)
+CFILES   = $(MAINFILE) $(INCLUDE)/debug_serial.c $(INCLUDE)/oled_dma.c $(INCLUDE)/system.c  $(wildcard $(INCLUDE)/*.S)
 # CFILES   = $(MAINFILE) $(INCLUDE)/debug_serial.c $(INCLUDE)/i2c_tx.c $(INCLUDE)/oled_term.c $(INCLUDE)/system.c  $(wildcard $(INCLUDE)/*.S)
 
 # Symbolic Targets

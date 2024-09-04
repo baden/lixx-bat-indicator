@@ -1,10 +1,11 @@
 #include <stdbool.h>
 #include "gpio.h"
 // #include "debug_serial.h"
-#include "i2c_tx.h"
+// #include "i2c_tx.h"
 
 // TODO: Може зробимо так? : https://github.com/wagiminator/Development-Boards/tree/main/CH32V003A4M6_DevBoard/software/oled_dma
-#include "oled_min.h"
+// #include "oled_min.h"
+#include "oled_dma.h"
 // #include "oled_term.h"
 #include "system.h"
 
@@ -115,6 +116,7 @@ void EXTI7_0_IRQHandler( void )
 
 #include "spritebank.h"
 
+#if 0
 // OLED commands
 #define JOY_OLED_init             OLED_init
 #define JOY_OLED_end              I2C_stop
@@ -309,6 +311,7 @@ void showVoltage()
 
 }
 
+#endif
 
 static inline uint16_t _ADC_read_VDD(void) {
   ADC_input_VREF();                             // set VREF as ADC input
@@ -329,6 +332,38 @@ int main(void)
 {
     init();
 
+    char buffer[9] = "4456v";
+
+    OLED_clear();
+    OLED_print(0, 0, "Hello World", 1, 1);
+    OLED_print(0, 8, buffer, 1, 4);
+
+
+    // OLED_stretchPrint(0, 12, "1234567890", 1);
+    // OLED_smoothPrint(64, 12, "12345", 1);    
+
+    for(;;) {
+        buffer[3] += 1;
+        if(buffer[3] > '9') {
+            buffer[3] = '0';
+            buffer[2] += 1;
+            if(buffer[2] > '9') {
+                buffer[2] = '0';
+                buffer[1] += 1;
+                if(buffer[1] > '9') {
+                    buffer[1] = '0';
+                    buffer[0] += 1;
+                    if(buffer[0] > '9') {
+                        buffer[0] = '0';
+                    }
+                }
+            }
+        }
+        OLED_print(0, 8, buffer, 1, 4);
+
+    }
+
+#if 0
     // OLED_clear();
 
     // OLED_setline(0);
@@ -458,4 +493,6 @@ int main(void)
         DEBUG_printf("Counter: %d  Last value: %d  Duration: %d\n", counter, last_value, duration);
     #endif
     }
+
+#endif
 }
